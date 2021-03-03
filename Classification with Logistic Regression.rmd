@@ -1,0 +1,367 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r echo=FALSE}
+
+knitr::opts_chunk$set(error = TRUE)
+
+
+
+```
+
+# Classification with Logistic Regression
+
+```{r include=FALSE}
+
+# install.packages("tidyverse")
+# install.packages("e1071")
+# install.packages("tidymodels")
+# install.packages("ROCR")
+
+```
+
+```{r include=FALSE}
+
+
+library(tidymodels)
+library(tidyverse)
+library(e1071)
+library(ROCR)
+
+```
+
+
+```{r}
+# Importing data set
+
+parole <- read_csv("parole.csv")
+
+# changing variables to factors
+parole = parole %>%
+  mutate(male = as_factor(male), race = as_factor(race), state = as_factor(state), crime = as_factor(state), crime = as_factor(crime), multiple.offenses = as_factor(multiple.offenses), violator = as_factor(violator)) %>%
+  mutate(male = fct_recode(male, "Female" = "0", "Male" = "1" ), 
+         race = fct_recode(race, "White" = "1", "Other" = "2"), 
+         state = fct_recode(state, "Other" = "1", "Kentucky" = "2", "Louisiana" = "3", "Virginia" = "4"), 
+         crime = fct_recode(crime, "Other" = "1", "Larceny" = "2", "Drug-related" = "3", "Driving-related" = "4"),
+         multiple.offenses = fct_recode(multiple.offenses, "Other" = "0", "MultipleOffenses" = "1"), 
+         violator = fct_recode(violator, "YesViolation" = "1", "NoViolation" = "0"))
+
+
+```
+
+### Task 1: Splitting the data into Training and Testing sets
+
+```{r}
+
+set.seed(12345)
+parole_split = initial_split(parole, prob = 0.70, strata = violator)
+train = training(parole_split)
+test = testing(parole_split)
+
+```
+
+### Task 2: Visuals for Predicting whether or not a Parolee Will Violate Parole or Not
+
+```{r}
+# Bar chart for male
+ggplot(parole, aes(x= male, fill=violator)) + 
+  geom_bar() + 
+  theme_bw()
+
+# Bar chart for race
+ggplot(parole, aes(x= race, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+
+# Bar chart for state
+ggplot(parole, aes(x= state, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+
+# Bar chart for multiple.offenses
+ggplot(parole, aes(x=multiple.offenses, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+
+ggplot(parole, aes(x=crime, fill = violator)) + 
+  geom_bar() + 
+  theme_bw()
+
+```
+```{r}
+
+# Tabular views of the above data
+
+# Table for male
+t1 = table(parole$violator, parole$male) #create a table object
+prop.table(t1, margin = 2 ) #crosstab with proportions
+
+# Table for race
+t2 = table(parole$violator, parole$race) #create a table object
+prop.table(t2, margin = 2 ) #crosstab with proportions
+
+# Table for state
+t3 = table(parole$violator, parole$state) #create a table object
+prop.table(t3, margin = 2 ) #crosstab with proportions
+
+# Table for multiple.offenses
+t4 = table(parole$violator, parole$multiple.offenses) #create a table object
+prop.table(t4, margin = 2 ) #crosstab with proportions
+
+t5 = table(parole$violator, parole$crime) #create a table object
+prop.table(t5, margin = 2 ) #crosstab with proportions
+
+
+```
+
+
+As we look at the data, it appears that all the values show a higher number of no violations than violations. So, I think attempt to look at a prediction of who will break parole. With that, I want to see consistency in both violation and non-violation - from a data perspective. In some of the examples, for instance the 'male' variable, you'll see that males do have a slightly higher number of violations than female - however. There are also a higher number of males on parole than females, so it increases the chances by default. It doesn't mean it's truly a good predictor at face value. Similar results apply to other variables like race, state and crime. You'll see slightly higher violation values but inconsistent total parole values. 
+
+### Task 3:
+
+The most predictive of violator is the 'multiple.offenses' variable. This is because the total number on parole is close and you can see that there is a difference in 'Other' and 'Multiple Offenses'. From a common sense perspective, it's reasonable to think that people who commit multiple offenses would possibly have higher chances of breaking parole. 
+
+```{r}
+
+# Log Regression Model of Multiple.Offense vs Violator
+parole_model = 
+  logistic_reg() %>% 
+  set_engine("glm") 
+
+parole_recipe = recipe(violator ~ multiple.offenses, parole) %>%
+  step_dummy(all_nominal(), -all_outcomes()) #exclude the response variable from being dummy converted  
+
+logreg_wf = workflow() %>%
+  add_recipe(parole_recipe) %>% 
+  add_model(parole_model)
+
+parole_fit = fit(logreg_wf, parole)
+
+
+```
+
+```{r}
+
+summary(parole_fit$fit$fit$fit)
+
+```
+
+When looking at the model, the P-values show some significance in the 'multiple.Offense' variable. A lower AIC value is a good thing normally, but a AIC of 479.81 is hard to gauge, without comparison to other variables. I will say that the coefficients are telling. It appears that you're more likely to violate parole if you have multiple offenses (0.6810 for Multiple vs -2.4441 for Other), which was the point of choosing that variable for the Log Reg analysis.
+
+
+### Task 4: Manually the best model you can to predict “violator”.
+
+```{r}
+
+# Using training data to manually build a multi-variable prediction model for violator
+
+# Log Regression Model 
+parole_model2 = 
+  logistic_reg() %>% 
+  set_engine("glm") 
+
+parole_recipe2 = recipe(violator ~ multiple.offenses + male + race + state, train) %>%
+  step_dummy(all_nominal(), -all_outcomes()) #exclude the response variable from being dummy converted  
+
+logreg_wf = workflow() %>%
+  add_recipe(parole_recipe2) %>% 
+  add_model(parole_model2)
+
+parole_fit2 = fit(logreg_wf, train)
+
+
+```
+
+```{r}
+
+
+summary(parole_fit2$fit$fit$fit)
+
+```
+
+Regarding "goodness", it appears that this model is an improvement over the single variable model. By including additional variables, you can see the Akaike Information Criterion (AIC) dropped from 479.81 to 280.44, which is good. Multiple Offenses, Race_Other, Lousianna and Virginia are significant values. It appears that if you've commited multiple offenses, your chances of breaking parole are higher. If you are a race other the white, the likelihood is statistically higher. Of the states in the data set, if you're from Louisiana, you're statistically more likely to break parole and statistically less likely if you're from Virginia. 
+
+
+### Task 5: Create a logistic regression model using the training set to predict “violator” using the variables: state, multiple.offenses, and race.
+
+
+```{r}
+
+# Using training set with state, multiple.offenses, and race
+
+# Log Regression Model 
+parole_model3 = 
+  logistic_reg() %>% 
+  set_engine("glm") 
+
+parole_recipe3 = recipe(violator ~ state + multiple.offenses + race, train) %>%
+  step_dummy(all_nominal(), -all_outcomes()) #exclude the response variable from being dummy converted  
+
+logreg_wf = workflow() %>%
+  add_recipe(parole_recipe3) %>% 
+  add_model(parole_model3)
+
+parole_fit3 = fit(logreg_wf, train)
+
+predictions = predict(parole_fit3, train, type="prob")[2]
+head(predictions)
+
+```
+
+```{r}
+
+
+summary(parole_fit3$fit$fit$fit)
+
+```
+Much like the model above, but an even better improvement (based on AIC of 278.47) - it appears that removing some potential clutter variables - the model gets a little tighter. As before, the same values remain significant and the same implications are present. The only improvement is the AIC. 
+
+### Task 6: What is the predicted probability of parole violation of the two following parolees? 
+
+
+```{r}
+
+# Parolee 1: Louisiana with multiple offenses and white race
+
+newdata = data.frame(state = "Louisiana", multiple.offenses = "MultipleOffenses", race = "White")
+
+predict(parole_fit3, newdata, type="prob") #develop predicted probabilities
+
+
+```
+Parolee 1: NO = ~56% chance and YES = ~ 44% chance. 
+
+```{r}
+
+# Parolee 2: Kentucky with no multiple offenses and other race
+
+newdata2 = data.frame(state = "Kentucky", multiple.offenses = "Other", race = "Other")
+
+predict(parole_fit3, newdata2, type="prob") #develop predicted probabilities
+
+```
+
+Parolee 2: NO = ~85% chance and YES = ~ 15% chance. 
+
+### Task 7: Develop an ROC curve and determine the probability threshold that best balances specificity and sensitivity (on the training set).
+
+```{r}
+
+# ROC Curve code
+ROCRpred = prediction(predictions, train$violator) 
+
+###You shouldn't need to ever change the next two lines:
+roc.perf = performance(ROCRpred, "tpr", "fpr")
+plot(roc.perf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+
+```
+
+```{r}
+
+as.numeric(performance(ROCRpred, "auc")@y.values)
+
+
+
+```
+
+
+```{r}
+
+#Determine threshold to balance sensitivity and specificity
+#DO NOT modify this code
+
+opt.cut = function(perf, pred){
+    cut.ind = mapply(FUN=function(x, y, p){
+        d = (x - 0)^2 + (y-1)^2
+        ind = which(d == min(d))
+        c(sensitivity = y[[ind]], specificity = 1-x[[ind]], 
+            cutoff = p[[ind]])
+    }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+
+print(opt.cut(roc.perf, ROCRpred))
+
+
+```
+
+### Task 8: What is the accuracy, sensitivity, and specificity of the model on the training set given the cutoff from Task 7?
+
+```{r}
+
+# Test thresholds to evaluate accuracy  
+#confusion matrix
+#The "No" and "Yes" represent the actual values
+#The "FALSE" and "TRUE" represent our predicted values
+t1 = table(train$violator,predictions > 0.1070172)
+t1
+
+
+```
+
+  
+```{r}
+
+# Calculating Accuracy
+(t1[1,1]+t1[2,2])/nrow(train)
+```
+### What are the implications of incorrectly classifying a parolee?
+
+Well, the idea is to figure out what the likelihood of violating parole is for a parolee. By incorrectly classifying a parolee, you run the risk of letting someone out of prison who goes AWOL and could potentially commit another crime. 
+
+### Task 9: Identify a probability threshold (via trial-and-error) that best maximizes accuracy on the training set.
+```{r}
+t1 = table(train$violator,predictions > .5)
+t1
+(t1[1,1]+t1[2,2])/nrow(train)
+```
+Trying to input a value of > .6 forces the TRUE column to drop off and throws an error, so it's essentially like the Naive prediction below:
+
+```{r}
+#naive
+t3 = table(train$violator,predictions > 1) #set threshold to 1 so all are classified as not delinquent
+t3
+(t3[1])/nrow(train)
+```
+Considering the two values being similar, we'll stick with a .5 value that seems more realistic. 
+
+### Task 10: Use your probability threshold from Task 9 to determine accuracy of the model on the testing set.
+
+```{r test variables}
+
+# Log Regression Model for Test data
+parole_model4 = 
+  logistic_reg() %>% 
+  set_engine("glm") 
+
+parole_recipe4 = recipe(violator ~ state + multiple.offenses + race, test) %>%
+  step_dummy(all_nominal(), -all_outcomes()) #exclude the response variable from being dummy converted  
+
+logreg_wf2 = workflow() %>%
+  add_recipe(parole_recipe4) %>% 
+  add_model(parole_model4)
+
+parole_fit4 = fit(logreg_wf2, test)
+
+```
+
+```{r}
+summary(parole_fit4$fit$fit$fit)
+```
+
+
+```{r}
+predictions2 = predict(parole_fit4, test, type="prob")[2]
+```
+
+
+```{r}
+t4 = table(test$violator,predictions2 > 0.5)
+t4
+
+(t4[1,1]+t4[2,2])/nrow(test)
+
+```
+It appears that the test set works well with the model, considering the 0.9345 (93.45%) accuracy. 

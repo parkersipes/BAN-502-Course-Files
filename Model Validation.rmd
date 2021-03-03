@@ -1,0 +1,145 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+```{r echo=FALSE}
+
+knitr::opts_chunk$set(error = TRUE)
+
+
+
+```
+
+## Model Validation
+
+```{r include = FALSE}
+
+# install.packages("tidyverse")
+# install.packages("tidymodels")
+# install.packages("lubridate")
+
+library(tidymodels)
+library(lubridate)
+library(tidyverse)
+
+
+
+```
+
+
+### Importing and Prepping the Data
+
+```{r}
+# Importing data set
+
+bike <- read_csv("bike_cleaned.csv")
+
+# Change dteday into date variable
+bike = bike %>% 
+  mutate(dteday = mdy(dteday)) #mdy is a lubridate package function
+
+# Mutating dplyr function to change characters to factors
+bike = bike %>%
+  mutate_if(sapply(bike, is_character), as_factor)
+
+# Converting "HR" variable to factor
+bike = bike %>%
+  mutate(hr = as_factor(hr))
+
+```
+
+### Task 1: Creating a training and testing set
+
+```{r}
+
+# Creating a training and testing set
+
+set.seed(1234)
+bike_split = initial_split(bike, prob = 0.70, strata = count)
+train = training(bike_split)
+test = testing(bike_split)
+
+```
+
+### Task 2: ow many rows of data are in each set (training and testing)? 
+
+There are 13036 rows in training and 3434 rows in testing. 
+
+### Task 3: Building a Linear Regression Model using the Training Data Set
+
+```{r}
+# Building a recipe - using training data set
+bike_recipe = recipe(count ~ season + mnth + hr + holiday + weekday + temp + weathersit, train)
+
+lm_model = #give the model type a name 
+  linear_reg() %>% #specify that we are doing linear regression
+  set_engine("lm") #specify the specify type of linear tool we want to use 
+
+lm_wflow = 
+  workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(bike_recipe)
+
+lm_fit = fit(lm_wflow, train)
+
+```
+
+```{r}
+# Summarizing the data
+summary(lm_fit$fit$fit$fit)
+
+```
+### Task 3 Commentary:
+
+The Adjusted R-squared is 0.6229. The model shows some significant values. Most of the variables show some significance. In other words, the time of day (hr), whether or not it's raining (weathersit) and or how warm it is (both season and temp) have an effect on count (i.e. bikes rented). 
+
+### Task 4: Making Predictions Using the Model in Task 3
+
+```{r}
+
+# Making Predictions:
+
+predict_train = lm_fit %>% 
+  predict(train)
+
+```
+
+### Histogram Of the Data
+```{r}
+
+# Making a histogram of the data
+
+ggplot(predict_train, aes(x=.pred)) +
+  geom_histogram()
+
+
+```
+The distribution appears to be "Double-Peaked" or "Bimodal", which is more than like a result of the stratification process performed earlier in the code/data. Also, considering we're basing the data off of count - it could possibly be a result of a binary situation (count goes up during certain periods or count goes down in certain periods). 
+
+
+### Task 5: Determining the R-squared value of the model on the testing set.
+
+```{r}
+# Building a recipe - using training data set
+bike_recipe2 = recipe(count ~ season + mnth + hr + holiday + weekday + temp + weathersit, test)
+
+lm_model = #give the model type a name 
+  linear_reg() %>% #specify that we are doing linear regression
+  set_engine("lm") #specify the specify type of linear tool we want to use 
+
+lm_wflow = 
+  workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(bike_recipe2)
+
+lm_fit = fit(lm_wflow, test)
+
+```
+
+```{r}
+# Summarizing the data
+summary(lm_fit$fit$fit$fit)
+
+```
+The Adjusted R-squared of the training set is 0.6229 and the Adjusted R-squared of the testing set is 0.63. As described in the lecture material, an R-squared value that goes up isn't typical, but the data sets are rendering these results. This is an indication of a consistent model, considering the values of both sets are close. 

@@ -1,0 +1,203 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+## Clustering
+
+```{r include=FALSE}
+
+# Load your specific package names in this dataframe
+packages <- c("tidyverse", "tidymodels")
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if(any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+# Packages loading
+invisible(lapply(packages, library, character.only = TRUE))
+
+```
+
+
+```{r}
+# Loading in the data set
+trucks = read.csv("trucks.csv")
+
+```
+
+
+# Task 1:
+
+```{r}
+str(trucks)
+summary(trucks)
+
+```
+```{r}
+
+ggplot(trucks, aes(Distance, Speeding, color=Driver_ID)) +
+  geom_point()
+
+```
+There appears to be some natural clustering of drivers. Drivers tend to naturally cluster between two (possibly three) groups. The first group is between 50-75 (Distance) and 0-50 
+(Speeding), with a potential intermediary group between roughly 20-50 at the same Distance variable. The third group is between roughly 130 and 225 (Distance) and 0-25 (Speeding). 
+
+### Task 2:
+
+```{r}
+
+
+kmeans_recipe = recipe(~ Distance + Speeding, trucks) 
+
+trucks_dummy = kmeans_recipe %>% 
+  step_scale(all_numeric()) %>%
+  step_center(all_numeric()) 
+
+trucks_dummy = prep(trucks_dummy, trucks) #prepares the recipe
+
+trucks_cleaned = bake(trucks_dummy, trucks) #applies the recipe and yields a data frame
+
+```
+
+### Task 3:
+
+```{r}
+
+set.seed(64)
+clusts = 
+  tibble(k = 2) %>%
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks_cleaned)
+  )
+
+clusts
+
+```
+```{r}
+
+clusters = 
+  clusts %>%
+  unnest(cols = c(tidied))
+
+assignments = 
+  clusts %>% 
+  unnest(cols = c(augmented))
+
+clusterings = 
+  clusts %>%
+  unnest(cols = c(glanced))
+
+```
+
+```{r}
+p1 = 
+  ggplot(assignments, aes(x = Distance, y = Speeding)) +
+  geom_point(aes(color = .cluster), alpha = 0.8) + 
+  facet_wrap(~ k)
+p1
+```
+
+
+Going back to Task 1, there appears to be 2 dense clusters and 1 potential cluster. However, we've set the parameters to 2 clusters. I would say the same thing applies as Task 1. Drivers tend to spend 0-12.5% of their time above the speed limit when traveling less that 75 miles in distance and that number has a break in it until it reaches roughly 130-230 miles in distance where a similar (yet slightly less dense) phenomenon occurs. 
+
+### Task 4:
+
+```{r}
+
+set.seed(412)
+clusts2 = 
+  tibble(k = 1:8) %>%
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks_cleaned)
+  )
+
+clusts2
+
+```
+
+```{r}
+
+clusters2 = 
+  clusts2 %>%
+  unnest(cols = c(tidied))
+
+assignments2 = 
+  clusts2 %>% 
+  unnest(cols = c(augmented))
+
+clusterings2 = 
+  clusts2 %>%
+  unnest(cols = c(glanced))
+
+```
+
+```{r}
+p2 = 
+  ggplot(assignments2, aes(x = Distance, y = Speeding)) +
+  geom_point(aes(color = .cluster), alpha = 0.8) + 
+  facet_wrap(~ k)
+p2
+```
+Comparing the cluster grid view to the previous 2 cluster example above, the initial 'guess' would be (2). However, (4) appears to be a viable choice as well.
+
+### Task 5:
+
+```{r}
+ggplot(clusterings2, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + theme_bw()
+```
+
+The idea above of (4) is confirmed by the elbow plot above, so the optimal k-value should (in my opinion) be (4). 
+
+### Task 6:
+
+```{r}
+
+set.seed(64)
+clusts3 = 
+  tibble(k = 4) %>%
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks_cleaned)
+  )
+
+clusts3
+
+```
+
+```{r}
+
+clusters3 = 
+  clusts3 %>%
+  unnest(cols = c(tidied))
+
+assignments3 = 
+  clusts3 %>% 
+  unnest(cols = c(augmented))
+
+clusterings3 = 
+  clusts3 %>%
+  unnest(cols = c(glanced))
+
+```
+
+```{r}
+p3 = 
+  ggplot(assignments, aes(x = Distance, y = Speeding)) +
+  geom_point(aes(color = .cluster), alpha = 0.8) + 
+  facet_wrap(~ k)
+p3
+
+```
+
+As logic and "progress" would suggest from the sequence in this assignment - the original 2 (with the hunch of 3) clusters has actually expanded to 4 in total. Based on this data, you can see almost 4 quadrants in a way. You can also draw a vertical line through the middle of the plot and separate the clusters into two columns of seemingly similar behavior. In other words, there are dense clusters of drivers that stay pretty close to the speed limit. However, each "column" I mentioned has some breakout clusters. More specifically, there is a percentage of drivers no matter how far they are driving that tend to stay above the speed limit. For drivers traveling short distances, speeding it just speeding. It may have something to do with a tight schedule. For drivers traveling longer distances, speed could have something to do with trying to get to their destination faster. In either case, as a manager or owner of a trucking company - I would be paying special attention to the percentage of trucks/drivers I had that were hanging out above the speed limit and consider what sort of liability I had if something were to happen. As a consultant, if there was a proven correlation to speed and reduction or liability, I could use this data to provide some means of reduction and possible insurance premium savings by implementing a solution to cut these percentages down. 
