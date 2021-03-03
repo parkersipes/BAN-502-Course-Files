@@ -1,0 +1,323 @@
+---
+title: "BAN502 Flex Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: bootstrap
+    orientation: columns
+    runtime: shiny
+    
+---
+
+
+<style>       
+
+img {
+
+
+display: block;
+margin: auto;
+
+}
+
+p{
+
+margin: auto;
+}
+
+.navbar {
+  background-color:#524727;
+  border-color:#fff;
+}
+.navbar-brand {
+color:#fff!important;
+}
+
+a:hover{
+
+background-color: #F1BE48 !important;
+color: #fff;
+}
+
+.navbar-inverse .navbar-nav>.active>a, .navbar-inverse .navbar-nav>.active>a:hover, .navbar-inverse .navbar-nav>.active>a:focus {
+
+background-color: #F1BE48 !important;
+color: #fff;
+}
+
+.navbar-inverse .navbar-nav > li > a {
+    color: #fff;
+}
+
+
+
+</style> 
+
+
+```{r setup, include=FALSE}
+
+# install.packages("flexdashboard")
+# install.packages("tidyverse", repos = 'http://cran.us.r-project.org')
+# install.packages("tidymodels", repos = 'http://cran.us.r-project.org')
+# install.packages("mice", repos = 'http://cran.us.r-project.org')
+# install.packages("VIM", repos = 'http://cran.us.r-project.org')
+# install.packages("skimr", repos = 'http://cran.us.r-project.org')
+# install.packages("GGally", repos = 'http://cran.us.r-project.org')
+# install.packages("gridExtra", repos = 'http://cran.us.r-project.org')
+# install.packages("ggcorrplot" , repos = 'http://cran.us.r-project.org')
+# install.packages("rpart" , repos = 'http://cran.us.r-project.org')
+# install.packages("png" , repos = 'http://cran.us.r-project.org')
+# install.packages("grid" , repos = 'http://cran.us.r-project.org')
+
+
+
+library(tidyverse)
+library(tidymodels)
+library(mice) #in case we need to do imputations
+library(VIM) #to help us visualize missingness
+library(skimr) #helps us see missing data
+library(GGally) #helps us create visualizations
+library (gridExtra) #allows us to create a grid of our graphs
+library(ggcorrplot)#allows for correlations
+library(flexdashboard) # flex dashboard
+library(rpart)
+library(png)
+library(grid)
+
+
+ames = read_csv("ames_student.csv")
+
+```
+
+```{r}
+# Cleaning and prepping data for chart
+
+ames = ames %>% mutate_if(is.character, as_factor)
+
+ames = ames %>% mutate(Bsmt_Full_Bath = as_factor(Bsmt_Full_Bath))
+ames = ames %>% mutate(Bsmt_Half_Bath = as_factor(Bsmt_Half_Bath))
+ames = ames %>% mutate(Full_Bath = as_factor(Full_Bath))
+ames = ames %>% mutate(Half_Bath = as_factor(Half_Bath))
+ames = ames %>% mutate(Bedroom_AbvGr = as_factor(Bedroom_AbvGr))
+ames = ames %>% mutate(Kitchen_AbvGr = as_factor(Kitchen_AbvGr))
+ames = ames %>% mutate(TotRms_AbvGrd = as_factor(TotRms_AbvGrd))
+ames = ames %>% mutate(Fireplaces = as_factor(Fireplaces))
+ames = ames %>% mutate(Garage_Cars = as_factor(Garage_Cars))
+ames = ames %>% mutate(Mo_Sold = as_factor(Mo_Sold))
+ames = ames %>% mutate(Roof_Matl = as_factor(Roof_Matl))
+
+```
+
+```{r}
+
+ames = dplyr::select(ames, -(X1), -(Utilities), -(Pool_QC), -(Latitude), -(Longitude), -(MS_SubClass))
+
+#for Bsmt_Full_Bath likely need to combine anything 2 and above. Done
+#For Bsmt_Half_Bath, combine to y/n Done
+#Kitchen_Abv_Gr combine 2+ Done
+#Need to keep an eye on Fireplaces...only 7 in 3
+#Keep an eye on GarageQual and GarageCond
+#Pool_QC can be removed, Pool_Area needs to changed to Y/N because there are too few in the different levels
+#Dropped MS_Subclass, because we have other data like "year built" - Done
+
+ames = ames %>%
+  mutate(Bsmt_Full_Bath = fct_recode(Bsmt_Full_Bath, "0" = "0", "1+" = "1", "1+" = "2", "1+" = "3"))
+
+ames = ames %>%
+  mutate(Bsmt_Half_Bath = fct_recode(Bsmt_Half_Bath, "0" = "0", "1" = "1", "2+" = "2"))
+
+ames = ames %>%
+  mutate(Kitchen_AbvGr = fct_recode(Kitchen_AbvGr, "1" = "1", "2+" = "2", "2+" = "3"))
+
+ames = ames %>% mutate(Pool_Area = case_when(Pool_Area > 0 ~ "Yes", Pool_Area == 0 ~ "No"))
+
+ames = ames %>% mutate(Pool_Area = as_factor(Pool_Area))
+
+ames = ames %>% mutate(Wood_Deck_SF = case_when(Wood_Deck_SF > 0 ~ "Yes", Wood_Deck_SF == 0 ~ "No"))
+
+ames = ames %>%mutate(Wood_Deck_SF = as_factor(Wood_Deck_SF))
+
+ames = ames %>% mutate(Open_Porch_SF = case_when(Open_Porch_SF > 0 ~ "Yes", Open_Porch_SF == 0 ~ "No"))
+
+ames = ames %>%mutate(Open_Porch_SF = as_factor(Open_Porch_SF))
+
+ames = ames %>% mutate(Enclosed_Porch = case_when(Enclosed_Porch > 0 ~ "Yes", Enclosed_Porch == 0 ~ "No"))
+
+ames = ames %>%mutate(Enclosed_Porch = as_factor(Enclosed_Porch))
+ames = ames %>% mutate(Three_season_porch = case_when(Three_season_porch > 0 ~ "Yes", Three_season_porch == 0 ~ "No"))
+
+ames = ames %>%mutate(Three_season_porch = as_factor(Three_season_porch))
+
+ames = ames %>% mutate(Screen_Porch = case_when(Screen_Porch > 0 ~ "Yes", Screen_Porch == 0 ~ "No"))
+
+ames = ames %>%mutate(Screen_Porch = as_factor(Screen_Porch))
+
+```
+
+
+```{r}
+
+
+ames = ames %>%
+  mutate(Exter_Cond = fct_recode(Exter_Cond, "Below Typical" = "Poor", "Below Typical" = "Fair", "Above Typical" = "Good", "Above Typical" = "Excellent"))
+ames = ames %>%
+  mutate(Bsmt_Qual = fct_recode(Bsmt_Qual, "Below Typical" = "Poor", "Below Typical" = "Fair", "Above Typical" = "Good", "Above Typical" = "Excellent"))
+ames = ames %>%
+  mutate(Bsmt_Cond = fct_recode(Bsmt_Cond, "Below Typical" = "Poor", "Below Typical" = "Fair", "Above Typical" = "Good", "Above Typical" = "Excellent"))
+ames = ames %>%
+  mutate(Heating_QC = fct_recode(Heating_QC, "Below Typical" = "Poor", "Below Typical" = "Fair", "Above Typical" = "Good", "Above Typical" = "Excellent"))
+ames = ames %>%
+  mutate(Kitchen_Qual = fct_recode(Kitchen_Qual, "Below Typical" = "Poor", "Below Typical" = "Fair", "Above Typical" = "Good", "Above Typical" = "Excellent"))
+ames = ames %>%
+  mutate(Garage_Qual = fct_recode(Garage_Qual, "Below Typical" = "Poor", "Below Typical" = "Fair", "Above Typical" = "Good", "Above Typical" = "Excellent"))
+ames = ames %>%
+  mutate(Garage_Cond = fct_recode(Garage_Cond, "Below Typical" = "Poor", "Below Typical" = "Fair", "Above Typical" = "Good", "Above Typical" = "Excellent"))
+
+```
+
+```{r}
+
+set.seed(1234)
+ames_split = initial_split(ames, prop = .7, strata = Above_Median)
+train = training(ames_split)
+test = testing(ames_split)
+
+```
+
+
+```{r}
+set.seed(1234)
+folds = vfold_cv(train, v = 5)
+```
+
+```{r}
+
+# code for colors to make some key visuals have Iowa State University colors in the spirit of Ames, IA.
+# Source: https://www.brandmarketing.iastate.edu/brand-elements/color-palette/
+
+# Reference this pallet in the color code 
+cbPalette <- c("#C8102E", "#F1BE48")
+
+# To use for fills, add
+# scale_fill_manual(values=cbPalette)
+
+```
+
+
+
+Year Built
+=====================================
+
+Column {data-width=200}
+-------------------------------------
+
+
+### **Year Built**
+
+*Year Built* is a key indicator of housing prices, inside of the Ames, IA Housing Data. Notice the right-skewed distribution. If you look at the visualization, you can see that as houses get newer, they trend upward in price. Despite the small dip in the '80s, the trend still remains upward. 
+
+Column 
+-------------------------------------
+
+
+```{r}
+
+ggplot(train, aes(Year_Built))+ geom_histogram(color="#C8102E", fill="#F1BE48") + ggtitle("Year Built")+ theme(axis.title.x = element_blank(),
+          axis.title.y = element_blank())
+
+# just in case
+# ggplot(train, aes(x= Year_Built, y= Above_Median))+
+# geom_boxplot(color="#C8102E", fill="#F1BE48")+ggtitle("Year Built")
+
+```
+
+
+
+
+Neighborhood
+=====================================
+
+Column {data-width=200}
+-------------------------------------
+
+
+### **Neighborhood**
+
+*Neighborhood* is also a key indicator of housing prices, inside of the Ames, IA Housing Data. Take a look at all the 'red' bars. These bars indicate the neighborhoods where all or most of the houses were above the median price. Basically, if you buy a house in one of them - expect to pay more. 
+
+Column 
+-------------------------------------
+
+```{r}
+
+ggplot(train, aes(x = Neighborhood, fill = Above_Median)) + geom_bar(position = "fill")+ 
+  ggtitle("Neighborhood") +
+  scale_fill_manual(values=cbPalette) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  theme(axis.title.x = element_blank(),
+          axis.title.y = element_blank()) +
+  scale_x_discrete(labels=c("North_Ames" = "N. Ames", "Gilbert" = "Gilbert", "Stone_Brook" = "Stone Brook", "Northwest_Ames" = "NW Ames", "Somerset" = "Somerset", "Briardale" = "Briardale", "Northpark_Villa" = "N. Park Villa", "Northridge_Heights" = "N.Ridge Heights", "Bloomington_Heights" = "Bloomington Heights", "Northridge" = "Northridge", "Sawyer_West" = "W. Sawyer", "Sawyer" = "Sawyer", "Greens" = "Greens", "Old_Town" = "Old Town", "Brookside" = "Brookside", "Iowa_DOT_and_Rail_Road" = "IA DOT & RR", "Clear_Creek" = "Clear Creek" ,"South_and_West_of_Iowa_State_University" = "Near IA State Univ.", "Edwards" = "Edwards", "College_Creek" = "College Creek", "Crawford" = "Crawford", "Mitchell" = "Mitchell", "Timberland" = "Timberland", "Meadow_Village" = "Meadow Village", "Veenker" = "Veenker", "Blueste" = "Blueste", "Landmark" = "Landmark", "Green_Hills" = "Green Hills" ))
+  
+
+
+
+```
+
+
+
+Overall Quality
+=====================================
+
+Column {data-width=200}
+-------------------------------------
+
+
+### **Overall Quality**
+
+Regarding house price. *Overall Quality* should be an obvious variable to determine which are more expensive. Still, we look at the data objectively and make an assessment. Luckily for us, we can see that Overall Quality is as we assumed it would be subjectively. Notice how all the "Good', "Very Good, "Excellent", "Very Excellent" levels are all or mostly red. Conversely, look at the remaining *bad* variables.  
+
+Column 
+-------------------------------------
+
+```{r}
+
+ggplot(train, aes(x = Overall_Qual, fill = Above_Median)) + geom_bar(position = "fill") +
+  ggtitle("Overall Quality")+
+  scale_fill_manual(values=cbPalette) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  
+  theme(axis.title.x = element_blank(),
+          axis.title.y = element_blank())
+
+```
+
+House Style
+=====================================
+
+Column {data-width=200}
+-------------------------------------
+
+
+### **House Style**
+
+Inititally, *House Style* wasn't an obvious indicator. However, it has a balanced spread, thus indicating that it is a more predictive variable for gauging house prices - when baked into a predictive model. It's a good variable to note, in addition to the heavily-weighted variable examples.  
+
+Column 
+-------------------------------------
+
+
+```{r}
+
+ggplot(train, aes(x = House_Style, fill = Above_Median)) + geom_bar(position = "fill") + ggtitle("House Style") +
+   scale_fill_manual(values=cbPalette) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  theme(axis.title.x = element_blank(),
+          axis.title.y = element_blank()) +
+  scale_x_discrete(labels=c("One_Story" = "1 Story", "Two_Story" = "2 Story", "One_and_Half_Fin" = "Fin. 1.5 Story", "SLvl" = "Single Level", "SFoyer" = "S. Foyer", "One_and_Half_Unf" = "Unfin. 1.5 Story", "Two_and_Half_Unf" = "Unfin. 2.5 Story", "Two_and_Half_Fin" = "Fin. 2.5 Story"))
+
+
+
+```
+
+
+
